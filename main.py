@@ -1,7 +1,7 @@
 import random
 import pygame
 from pygame.locals import *
-import asyncio
+
 
 
 pygame.init()
@@ -9,7 +9,7 @@ pygame.init()
 pygame.init()
 pygame.mixer.init()
 
-pygame.mixer.music.load("assets/flappybirdmusic.mp3")
+pygame.mixer.music.load("flappybirdmusic.mp3")
 pygame.mixer.music.play(-1)
 clock = pygame.time.Clock()
 fps = 60
@@ -39,8 +39,8 @@ font_big = pygame.font.Font(None, 56)
 font_small = pygame.font.Font(None, 30)
 
 # load images
-bg = pygame.image.load("assets/background-day.png")
-ground_img = pygame.image.load('assets/base.png')
+bg = pygame.image.load("background-day.png")
+ground_img = pygame.image.load('base.png')
 
 
 def draw_text(text, font, center):
@@ -194,7 +194,7 @@ class Pipe(pygame.sprite.Sprite):
         # y = center of the gap
         # position 1 = top pipe, -1 = bottom pipe
         pygame.sprite.Sprite.__init__(self)
-        self.image = pygame.image.load('assets/pipe-green.png')
+        self.image = pygame.image.load('pipe-green.png')
         self.rect = self.image.get_rect()
         if position == 1:
             self.image = pygame.transform.flip(self.image, False, True)
@@ -215,74 +215,70 @@ pipe_group = pygame.sprite.Group()
 flappy = Bird(100, int(screen_height / 2))
 bird_group.add(flappy)
 
-async def main():
 
-    run = True
-    while run:
+run = True
+while run:
 
+    clock.tick(fps)
 
+    # draw background
+    screen.blit(bg, (0, 0))
 
-        clock.tick(fps)
+    # generate a new pair of pipes with a random gap height
+    time_now = pygame.time.get_ticks()
+    if not game_over and time_now - last_pipe > pipe_frequency:
+        gap_center = random.randint(pipe_margin + pipe_gap // 2,
+                                    ground_top - pipe_margin - pipe_gap // 2)
+        pipe_group.add(Pipe(screen_width, gap_center, -1))   # bottom pipe
+        pipe_group.add(Pipe(screen_width, gap_center, 1))    # top pipe
+        last_pipe = time_now
 
-        # draw background
-        screen.blit(bg, (0, 0))
+    pipe_group.draw(screen)
+    if not game_over:
+        pipe_group.update()
 
-        # generate a new pair of pipes with a random gap height
-        time_now = pygame.time.get_ticks()
-        if not game_over and time_now - last_pipe > pipe_frequency:
-            gap_center = random.randint(pipe_margin + pipe_gap // 2,
-                                        ground_top - pipe_margin - pipe_gap // 2)
-            pipe_group.add(Pipe(screen_width, gap_center, -1))   # bottom pipe
-            pipe_group.add(Pipe(screen_width, gap_center, 1))    # top pipe
-            last_pipe = time_now
+    bird_group.draw(screen)
+    flappy.draw_arrow(screen)
+    bird_group.update()
 
-        pipe_group.draw(screen)
-        if not game_over:
-            pipe_group.update()
+    # lose condition: a pipe pushes the bird against the left wall and crushes it
+    if not game_over and flappy.rect.left <= 0:
+        if any(flappy.rect.colliderect(p.rect) for p in pipe_group):
+            game_over = True
+            flappy.aiming = False
+            flappy.pull = pygame.Vector2(0, 0)
+            flappy.vel = pygame.Vector2(0, 0)   # bird drops straight down
+            flappy.launched = True
 
-        bird_group.draw(screen)
-        flappy.draw_arrow(screen)
-        bird_group.update()
+    # draw and scroll the ground
+    screen.blit(ground_img, (ground_scroll, ground_top))
+    if not game_over:
+        ground_scroll -= scroll_speed
+        if abs(ground_scroll) > 60:
+            ground_scroll = 0
 
-        # lose condition: a pipe pushes the bird against the left wall and crushes it
-        if not game_over and flappy.rect.left <= 0:
-            if any(flappy.rect.colliderect(p.rect) for p in pipe_group):
-                game_over = True
-                flappy.aiming = False
-                flappy.pull = pygame.Vector2(0, 0)
-                flappy.vel = pygame.Vector2(0, 0)   # bird drops straight down
-                flappy.launched = True
+    if game_over:
+        draw_text("Game Over", font_big, (screen_width // 2, 200))
+        draw_text("Click to restart", font_small, (screen_width // 2, 250))
 
-        # draw and scroll the ground
-        screen.blit(ground_img, (ground_scroll, ground_top))
-        if not game_over:
-            ground_scroll -= scroll_speed
-            if abs(ground_scroll) > 60:
-                ground_scroll = 0
+    for event in pygame.event.get():
+        if event.type == QUIT:
+            run = False
+        if event.type == MOUSEBUTTONDOWN and event.button == 1:
+            if game_over:
+                # restart
+                pipe_group.empty()
+                bird_group.empty()
+                flappy = Bird(100, int(screen_height / 2))
+                bird_group.add(flappy)
+                last_pipe = pygame.time.get_ticks()   # short pause before the first pipe
+                game_over = False
+            # grab the bird (when it's resting on the ground or on a pipe)
+            elif (not flappy.launched or flappy.standing) and flappy.pos.distance_to(event.pos) < 40:
+                flappy.aiming = True
+        if event.type == MOUSEBUTTONUP and event.button == 1:
+            if flappy.aiming:
+                flappy.launch()
 
-        if game_over:
-            draw_text("Game Over", font_big, (screen_width // 2, 200))
-            draw_text("Click to restart", font_small, (screen_width // 2, 250))
-
-        for event in pygame.event.get():
-            if event.type == QUIT:
-                run = False
-            if event.type == MOUSEBUTTONDOWN and event.button == 1:
-                if game_over:
-                    # restart
-                    pipe_group.empty()
-                    bird_group.empty()
-                    flappy = Bird(100, int(screen_height / 2))
-                    bird_group.add(flappy)
-                    last_pipe = pygame.time.get_ticks()   # short pause before the first pipe
-                    game_over = False
-                # grab the bird (when it's resting on the ground or on a pipe)
-                elif (not flappy.launched or flappy.standing) and flappy.pos.distance_to(event.pos) < 40:
-                    flappy.aiming = True
-            if event.type == MOUSEBUTTONUP and event.button == 1:
-                if flappy.aiming:
-                    flappy.launch()
-
-        pygame.display.update()
-        await asyncio.sleep(1)
-    pygame.quit()
+    pygame.display.update()
+pygame.quit()
